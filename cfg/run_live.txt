@@ -1,0 +1,8 @@
+include=cfg/policy.txt
+
+model_path=models/best.onnx
+device=/dev/video2
+req_w=1280
+req_h=720
+record_fps=30
+out_video=data/output/live.avi

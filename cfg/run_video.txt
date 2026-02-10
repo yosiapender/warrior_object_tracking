@@ -1,0 +1,5 @@
+include=cfg/policy.txt
+
+model_path=models/best.onnx
+video_path=data/videos/video_30.avi
+out_video=data/output/no_obj.avi

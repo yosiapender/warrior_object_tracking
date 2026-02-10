@@ -2,8 +2,20 @@
 
 #include <opencv2/dnn.hpp>
 #include <algorithm>
-#include <cstring>
 #include <iostream>
+#include <numeric>
+#include <stdexcept>
+
+namespace {
+inline std::vector<int64_t> getShape(const Ort::TensorTypeAndShapeInfo& info) {
+    return info.GetShape();
+}
+inline size_t numel(const std::vector<int64_t>& shape) {
+    size_t n = 1;
+    for (int64_t d : shape) n *= static_cast<size_t>(d > 0 ? d : 1);
+    return n;
+}
+} // namespace
 
 YoloDetector::YoloDetector(const std::string& onnx_path,
                            int input_width,
@@ -41,37 +53,35 @@ void YoloDetector::initSession(const std::string& onnx_path, bool use_cuda) {
 
     Ort::AllocatorWithDefaultOptions allocator;
 
-    // Input names
-    size_t num_inputs = session_.GetInputCount();
+    const size_t num_inputs = session_.GetInputCount();
     input_names_.resize(num_inputs);
     for (size_t i = 0; i < num_inputs; ++i) {
         Ort::AllocatedStringPtr name(session_.GetInputNameAllocated(i, allocator));
         input_names_[i] = name.get();
     }
 
-    // Output names
-    size_t num_outputs = session_.GetOutputCount();
+    const size_t num_outputs = session_.GetOutputCount();
     output_names_.resize(num_outputs);
     for (size_t i = 0; i < num_outputs; ++i) {
         Ort::AllocatedStringPtr name(session_.GetOutputNameAllocated(i, allocator));
         output_names_[i] = name.get();
     }
 
-    // Optional: print I/O info once
     std::cout << "[INFO] Inputs: " << num_inputs << ", Outputs: " << num_outputs << "\n";
     for (size_t i = 0; i < num_inputs; ++i) std::cout << "  Input[" << i << "]: " << input_names_[i] << "\n";
     for (size_t i = 0; i < num_outputs; ++i) std::cout << "  Output[" << i << "]: " << output_names_[i] << "\n";
 }
 
 cv::Mat YoloDetector::preprocess(const cv::Mat& image, float& scale) {
-    int w = image.cols;
-    int h = image.rows;
+    const int w = image.cols;
+    const int h = image.rows;
 
-    // letterbox scale (top-left placement like your original)
-    scale = std::min(input_width_ / (float)w, input_height_ / (float)h);
+    // top-left letterbox like your current logic (pad right/bottom only)
+    scale = std::min(input_width_ / static_cast<float>(w),
+                     input_height_ / static_cast<float>(h));
 
-    int new_w = int(w * scale);
-    int new_h = int(h * scale);
+    const int new_w = static_cast<int>(w * scale);
+    const int new_h = static_cast<int>(h * scale);
 
     cv::Mat resized;
     cv::resize(image, resized, cv::Size(new_w, new_h));
@@ -79,9 +89,8 @@ cv::Mat YoloDetector::preprocess(const cv::Mat& image, float& scale) {
     cv::Mat padded(input_height_, input_width_, CV_8UC3, cv::Scalar(114, 114, 114));
     resized.copyTo(padded(cv::Rect(0, 0, new_w, new_h)));
 
-    // Convert to NCHW float32, normalized, RGB
-    // blob shape: 1x3xH xW
-    cv::Mat blob = cv::dnn::blobFromImage(
+    // NCHW float32 blob, normalized, RGB
+    return cv::dnn::blobFromImage(
         padded,
         1.0 / 255.0,
         cv::Size(input_width_, input_height_),
@@ -90,28 +99,25 @@ cv::Mat YoloDetector::preprocess(const cv::Mat& image, float& scale) {
         /*crop=*/false,
         CV_32F
     );
-    return blob;
 }
 
 std::vector<Detection> YoloDetector::postprocess(const cv::Size& orig_size,
                                                  float scale,
                                                  const float* out,
-                                                 size_t output_count) {
+                                                 size_t out_count) {
     std::vector<Detection> dets;
 
-    // Expect YOLO export: (1, 5, 8400) => total 42000 floats
-    // If model differs, we fail safely instead of drawing nonsense.
+    // Your current model expectation:
+    // (1, 5, 8400) => layout [x,y,w,h,conf] each length 8400
     constexpr int NUM_BOXES = 8400;
-    constexpr int CHANNELS = 5;
-    const size_t expected = (size_t)NUM_BOXES * CHANNELS;
-
-    if (output_count < expected) {
-        std::cerr << "[ERROR] Output tensor too small. Got " << output_count
+    constexpr int CHANNELS  = 5;
+    const size_t expected = static_cast<size_t>(NUM_BOXES) * CHANNELS;
+    if (out_count < expected) {
+        std::cerr << "[ERROR] Output tensor too small. Got " << out_count
                   << " floats, expected at least " << expected << "\n";
         return dets;
     }
 
-    // Layout: [x(8400), y(8400), w(8400), h(8400), conf(8400)]
     const float* xptr = out + 0 * NUM_BOXES;
     const float* yptr = out + 1 * NUM_BOXES;
     const float* wptr = out + 2 * NUM_BOXES;
@@ -121,28 +127,26 @@ std::vector<Detection> YoloDetector::postprocess(const cv::Size& orig_size,
     dets.reserve(64);
 
     for (int i = 0; i < NUM_BOXES; ++i) {
-        float conf = cptr[i];
+        const float conf = cptr[i];
         if (conf < conf_thres_) continue;
 
-        float cx = xptr[i];
-        float cy = yptr[i];
-        float bw = wptr[i];
-        float bh = hptr[i];
+        const float cx = xptr[i];
+        const float cy = yptr[i];
+        const float bw = wptr[i];
+        const float bh = hptr[i];
 
         float x = cx - 0.5f * bw;
         float y = cy - 0.5f * bh;
 
-        // Your preprocess places resized at (0,0) with padding on right/bottom.
-        // So no pad subtraction needed. Just scale back.
-        x  /= scale;
-        y  /= scale;
-        bw /= scale;
-        bh /= scale;
+        // pad is right/bottom only, no offset subtraction
+        x  /= scale; y  /= scale;
+        const float ww = bw / scale;
+        const float hh = bh / scale;
 
-        int x0 = std::max(0, (int)std::floor(x));
-        int y0 = std::max(0, (int)std::floor(y));
-        int x1 = std::min(orig_size.width,  (int)std::ceil(x + bw));
-        int y1 = std::min(orig_size.height, (int)std::ceil(y + bh));
+        const int x0 = std::max(0, static_cast<int>(std::floor(x)));
+        const int y0 = std::max(0, static_cast<int>(std::floor(y)));
+        const int x1 = std::min(orig_size.width,  static_cast<int>(std::ceil(x + ww)));
+        const int y1 = std::min(orig_size.height, static_cast<int>(std::ceil(y + hh)));
 
         if (x1 <= x0 || y1 <= y0) continue;
 
@@ -169,7 +173,7 @@ std::vector<Detection> YoloDetector::nms(const std::vector<Detection>& dets) con
     cv::dnn::NMSBoxes(
         boxes,
         scores,
-        /*score_threshold=*/conf_thres_,  // can also be 0.0f
+        /*score_threshold=*/conf_thres_,
         /*nms_threshold=*/nms_thres_,
         keep
     );
@@ -184,26 +188,24 @@ std::vector<Detection> YoloDetector::detect(const cv::Mat& image) {
     float scale = 1.0f;
     cv::Mat blob = preprocess(image, scale); // 1x3xH xW float32
 
-    // Build input tensor
-    std::vector<int64_t> input_shape = {1, 3, input_height_, input_width_};
-    const size_t tensor_size =
-        (size_t)input_shape[0] * input_shape[1] * input_shape[2] * input_shape[3];
+    if (blob.empty() || blob.type() != CV_32F) return {};
 
-    std::vector<float> input_tensor(tensor_size);
-    std::memcpy(input_tensor.data(), blob.ptr<float>(), tensor_size * sizeof(float));
+    // Build input tensor WITHOUT extra memcpy:
+    // blob data is contiguous float32 in NCHW.
+    const std::vector<int64_t> input_shape = {1, 3, input_height_, input_width_};
+    const size_t tensor_size = static_cast<size_t>(1) * 3 * input_height_ * input_width_;
+    float* blob_ptr = blob.ptr<float>();
 
-    Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(
-        OrtDeviceAllocator, OrtMemTypeCPU);
+    Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
 
     Ort::Value input_ort = Ort::Value::CreateTensor<float>(
         memory_info,
-        input_tensor.data(),
-        input_tensor.size(),
+        blob_ptr,
+        tensor_size,
         input_shape.data(),
         input_shape.size()
     );
 
-    // C-string names
     std::vector<const char*> input_names_c;
     input_names_c.reserve(input_names_.size());
     for (auto& s : input_names_) input_names_c.push_back(s.c_str());
@@ -212,7 +214,6 @@ std::vector<Detection> YoloDetector::detect(const cv::Mat& image) {
     output_names_c.reserve(output_names_.size());
     for (auto& s : output_names_) output_names_c.push_back(s.c_str());
 
-    // Run
     auto outputs = session_.Run(
         Ort::RunOptions{nullptr},
         input_names_c.data(),
@@ -224,12 +225,11 @@ std::vector<Detection> YoloDetector::detect(const cv::Mat& image) {
 
     if (outputs.empty()) return {};
 
-    // Get output buffer and count
     Ort::Value& out0 = outputs[0];
-    float* out_data = out0.GetTensorMutableData<float>();
+    const float* out_data = out0.GetTensorData<float>();
 
-    auto type_info = out0.GetTensorTypeAndShapeInfo();
-    size_t out_count = type_info.GetElementCount();
+    const auto type_info = out0.GetTensorTypeAndShapeInfo();
+    const size_t out_count = type_info.GetElementCount();
 
     auto dets = postprocess(image.size(), scale, out_data, out_count);
     return nms(dets);

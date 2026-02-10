@@ -1,0 +1,9 @@
+include=cfg/policy.txt
+
+model_path=models/model_v3.onnx
+video_path=data/videos/1_occlusion.avi
+xml_path=data/gt/video1.1.xml
+label=ball
+tracker=csrt
+out_csv=data/output/eval_hybrid.csv
+out_vis=data/output/eval_vis.avi

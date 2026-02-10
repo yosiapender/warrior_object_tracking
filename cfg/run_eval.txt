@@ -1,9 +1,9 @@
 include=cfg/policy.txt
 
 model_path=models/model_v3.onnx
-video_path=data/videos/1_occlusion.avi
-xml_path=data/gt/video1.1.xml
+video_path=data/videos/challenge2_distance_variation.avi
+xml_path=data/gt/challenge2_distance_variation_v1.1.xml
 label=ball
-tracker=csrt
-out_csv=data/output/eval_hybrid.csv
-out_vis=data/output/eval_vis.avi
+tracker=kcf
+out_csv=data/output/eval_distance_variation.csv
+out_vis=data/output/eval_distance_variation.avi

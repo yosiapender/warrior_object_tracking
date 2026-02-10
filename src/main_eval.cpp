@@ -234,6 +234,13 @@ int main(int argc, char** argv) {
 
     int fp_on_absent = 0;
 
+    // ============================================================
+    // YOLO schedule:
+    //   redetect_every == 0  => YOLO only on first frame, never again
+    //   redetect_every  > 0  => YOLO at init/lost + periodic
+    // ============================================================
+    const bool yolo_once = (policy.redetect_every == 0);
+
     while (true) {
         cv::Mat frame;
         cap >> frame;
@@ -252,10 +259,18 @@ int main(int argc, char** argv) {
         if (gt_has) ++gt_present_frames;
         else ++gt_absent_frames;
 
-        const bool periodic_redetect =
-            (policy.redetect_every > 0 && (frame_idx % policy.redetect_every == 0));
-        const bool need_yolo =
-            !tracker->isInitialized() || !have_track || periodic_redetect;
+        // ---- YOLO scheduling (requested behavior) ----
+        bool periodic_redetect = false;
+        if (!yolo_once && policy.redetect_every > 0) {
+            periodic_redetect = (frame_idx % policy.redetect_every == 0);
+        }
+
+        bool need_yolo = false;
+        if (yolo_once) {
+            need_yolo = (frame_idx == 0);
+        } else {
+            need_yolo = (!tracker->isInitialized() || !have_track || periodic_redetect);
+        }
 
         bool yolo_has = false;
         Detection best_det{};
@@ -291,6 +306,7 @@ int main(int argc, char** argv) {
                     cv::norm(app::rectCenter(track_tight) - app::rectCenter(yolo_box));
                 const double iou_val = app::IoU(track_tight, yolo_box);
 
+                // In yolo_once mode, periodic_redetect is always false (good).
                 if (policy.snap_on_periodic && periodic_redetect) must_snap = true;
                 if (center_dist > policy.snap_center_px) must_snap = true;
                 if (iou_val < policy.snap_iou_min) must_snap = true;

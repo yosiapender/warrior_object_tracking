@@ -41,6 +41,8 @@ set(COMMON_SOURCES
     src/detector/yolo_detector.cpp
     src/tracker/kcf_tracker.cpp
     src/tracker/csrt_tracker.cpp
+    src/tracker/kcf_local.cpp
+    src/tracker/colornames_lut.cpp
 )
 
 # =========================

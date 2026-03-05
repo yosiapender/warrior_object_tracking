@@ -199,7 +199,9 @@ int main(int argc, char** argv) {
         std::cerr << "[ERROR] Cannot write CSV: " << csv_out << "\n";
         return -1;
     }
-    fout << "frame,gt_has,pred_has,iou,center_dist_px,yolo_has,reinit\n";
+    fout << "frame,gt_has,pred_has,iou,center_dist_px,"
+        "yolo_has,reinit,"
+        "yolo_ms,yolo_fps,trk_ms,trk_fps,total_ms,total_fps\n";
 
     // Tracker switch
     std::unique_ptr<ITracker> tracker;
@@ -272,12 +274,15 @@ int main(int argc, char** argv) {
             need_yolo = (!tracker->isInitialized() || !have_track || periodic_redetect);
         }
 
+        bool yolo_ran = false;
         bool yolo_has = false;
         Detection best_det{};
         double yolo_ms = 0.0;
         double trk_ms  = 0.0;
 
         if (need_yolo) {
+            yolo_ran = true;
+
             yolo_t.start();
             const auto dets = detector.detect(frame);
             yolo_ms = yolo_t.stopMs();
@@ -314,7 +319,12 @@ int main(int argc, char** argv) {
 
             if (must_init || must_snap) {
                 tracker->reset();
-                if (tracker->init(frame, init_box)) {
+
+                trk_t.start();
+                const bool init_ok = tracker->init(frame, init_box);
+                trk_ms = trk_t.stopMs();
+
+                if (init_ok) {
                     track_box  = init_box;
                     have_track = true;
                     reinit     = true;
@@ -373,18 +383,29 @@ int main(int argc, char** argv) {
             ++fp_on_absent;
         }
 
+        const double total_ms = total_t.stopMs();
+        const double yolo_fps  = (yolo_ms > 0.0) ? (1000.0 / yolo_ms) : 0.0;
+        const double trk_fps   = (trk_ms  > 0.0) ? (1000.0 / trk_ms)  : 0.0;
+        const double total_fps = (total_ms > 0.0) ? (1000.0 / total_ms) : 0.0;
+
         fout << frame_idx << ","
-             << (gt_has ? 1 : 0) << ","
-             << (pred_has ? 1 : 0) << ","
-             << iou << ","
-             << cd << ","
-             << (yolo_has ? 1 : 0) << ","
-             << (reinit ? 1 : 0) << "\n";
+            << (gt_has ? 1 : 0) << ","
+            << (pred_has ? 1 : 0) << ","
+            << iou << ","
+            << cd << ","
+            << (yolo_has ? 1 : 0) << ","
+            << (reinit ? 1 : 0) << ","
+            << yolo_ms << ","
+            << yolo_fps << ","
+            << trk_ms << ","
+            << trk_fps << ","
+            << total_ms << ","
+            << total_fps << "\n";
 
         // ---- Visualization ----
         cv::Mat vis = frame.clone();
         if (gt_has) {
-            cv::rectangle(vis, gt_box, cv::Scalar(0, 255, 255), BOX_THICKNESS, LINE_STYLE);
+            // cv::rectangle(vis, gt_box, cv::Scalar(0, 255, 255), BOX_THICKNESS, LINE_STYLE);
         }
         if (pred_has) {
             cv::rectangle(vis, track_box, cv::Scalar(255, 0, 0), BOX_THICKNESS, LINE_STYLE);
@@ -394,10 +415,7 @@ int main(int argc, char** argv) {
                         cv::Scalar(0, 0, 255), 2, LINE_STYLE);
         }
 
-        const double total_ms = total_t.stopMs();
-        const double fps = (total_ms > 0.0) ? (1000.0 / total_ms) : 0.0;
-
-        cv::putText(vis, "FPS: " + std::to_string(static_cast<int>(fps)),
+        cv::putText(vis, "FPS: " + std::to_string(static_cast<int>(total_fps)),
                     {10, 30}, cv::FONT_HERSHEY_SIMPLEX, 0.8,
                     cv::Scalar(0, 0, 255), 2, LINE_STYLE);
 
@@ -406,9 +424,10 @@ int main(int argc, char** argv) {
                     cv::Scalar(0, 0, 255), 2, LINE_STYLE);
 
         app::drawTopRightStatus(vis,
-                                std::string("YOLO: ") + (yolo_has ? "ON" : "OFF") +
+                                std::string("YOLO: ") + (yolo_ran ? "ON" : "OFF") +
                                     "  " + std::to_string(static_cast<int>(std::lround(yolo_ms))) + " ms",
                                 0);
+
         app::drawTopRightStatus(vis,
                                 std::string("TRK: ") + (pred_has ? "ON" : "OFF") +
                                     "  " + std::to_string(static_cast<int>(std::lround(trk_ms))) + " ms",

@@ -1,0 +1,12 @@
+csv=data/output/1_occlusion/eval_occlusion_KCF.csv
+out_prefix=data/output/1_occlusion/eval_occlusion_KCF
+condition=Occlusion
+title_mode=both
+tracker=KCF
+legend_mode=kcf
+max_dist=50
+smooth_method=kde
+curve_points=3001
+kde_bins=512
+kde_sigma_px=0.8
+kde_sigma_iou=0.02

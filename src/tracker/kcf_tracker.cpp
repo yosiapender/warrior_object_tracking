@@ -2,82 +2,80 @@
 #include <iostream>
 
 KcfTracker::KcfTracker() {
-    params_ = cv::TrackerKCF::Params();
+    params_ = KcfLocalTracker::Params();
 
-    // Use CN in PCA pipeline so compressed_size <= channels is always true
-    params_.desc_pca  = cv::TrackerKCF::CN;   // <-- change from GRAY to CN
-    params_.desc_npca = cv::TrackerKCF::CN;
-
-    // Keep compression valid (CN has many channels)
-    params_.compress_feature = true;
-    params_.compressed_size = 2;              // <= CN channels (safe)
-
-    // Reasonable stability defaults
-    params_.resize = true;
+    // core KCF params
     params_.sigma = 0.2f;
-    params_.lambda = 0.0001f;
-    params_.interp_factor = 0.06f;            // a bit lower = less drift
+    params_.lambda = 1e-4f;
+    params_.interp_factor = 0.06f;
     params_.output_sigma_factor = 0.1f;
-    params_.pca_learning_rate = 0.15f;
+    params_.detect_thresh = 0.5f;
+
+    // CN/PCA toggles
+    params_.use_gray = true;
+    params_.use_cn = true;                 // <-- enable CN
+    params_.compress_feature = true;       // <-- enable PCA compression
+    params_.compressed_size = 10;           // typical
+    params_.pca_learning_rate = 0.15f;     // typical
+
+    params_.wrap_kernel = false;
+    params_.resize = true;
+    params_.max_patch_size = 80 * 80;
 }
 
 bool KcfTracker::init(const cv::Mat& frame, const cv::Rect& init_box) {
-    if (frame.empty()) {
-        std::cerr << "[KCF(CN)] init failed: empty frame\n";
+    if (frame.empty() || init_box.width <= 1 || init_box.height <= 1) {
         initialized_ = false;
-        return false;
-    }
-    if (init_box.width <= 1 || init_box.height <= 1) {
-        std::cerr << "[KCF(CN)] init failed: invalid init_box\n";
-        initialized_ = false;
+        tracker_.reset();
         return false;
     }
 
     try {
-        // Prefer params create; fallback if your OpenCV lacks it
-        try {
-            tracker_ = cv::TrackerKCF::create(params_);
-        } catch (...) {
-            tracker_ = cv::TrackerKCF::create();
+        tracker_ = std::make_unique<KcfLocalTracker>(params_);
+        if (!tracker_->init(frame, init_box)) {
+            initialized_ = false;
+            tracker_.reset();
+            return false;
         }
-
-        // Your OpenCV expects cv::Rect (int) here
-        cv::Rect box = init_box;
-        tracker_->init(frame, box);
-
         initialized_ = true;
         return true;
-    } catch (const cv::Exception& e) {
-        std::cerr << "[KCF(CN)] init exception: " << e.what() << "\n";
+    } catch (const std::exception& e) {
+        std::cerr << "[KCF(Local)] init exception: " << e.what() << "\n";
         initialized_ = false;
-        tracker_.release();
+        tracker_.reset();
         return false;
     }
 }
 
 bool KcfTracker::update(const cv::Mat& frame, cv::Rect& out_box) {
-    if (!initialized_ || tracker_.empty()) return false;
-    if (frame.empty()) return false;
+    if (!initialized_ || !tracker_ || frame.empty()) return false;
 
     bool ok = false;
     try {
-        // MUST be cv::Rect lvalue because update wants cv::Rect&
-        cv::Rect box = out_box;
-        ok = tracker_->update(frame, box);
-        out_box = box;
-    } catch (const cv::Exception& e) {
-        std::cerr << "[KCF(CN)] update exception: " << e.what() << "\n";
+        ok = tracker_->update(frame, out_box);
+    } catch (const std::exception& e) {
+        std::cerr << "[KCF(Local)] update exception: " << e.what() << "\n";
         ok = false;
     }
 
     if (!ok) {
         initialized_ = false;
-        tracker_.release();
+        tracker_.reset();
     }
     return ok;
 }
 
+bool KcfTracker::getSearchWindowRect(cv::Rect& out) const {
+    if (!tracker_) return false;
+    return tracker_->getSearchWindowRect(out);
+}
+
+bool KcfTracker::getLastResponseMap(cv::Mat& out_response32f) const {
+    if (!tracker_) return false;
+    return tracker_->getLastResponse(out_response32f);
+}
+
 void KcfTracker::reset() {
     initialized_ = false;
-    tracker_.release();
+    tracker_.reset();
 }

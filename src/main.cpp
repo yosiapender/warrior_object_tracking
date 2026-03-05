@@ -70,8 +70,8 @@ int main(int argc, char** argv) {
     else std::cerr << "[WARN] VideoWriter not opened; running without saving.\n";
 
     // Choose tracker (simple switch)
-    CsrtTracker tracker;
-    // KcfTracker tracker;
+    //CsrtTracker tracker;
+    KcfTracker tracker;
 
     cv::Rect track_box{};
     bool have_track = false;

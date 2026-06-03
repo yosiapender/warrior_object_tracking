@@ -17,9 +17,9 @@ Recommended workflow: **always run executables from the project root**.
 
 So config paths should be project-root relative (no `../`), for example:
 
-- `models/best.onnx` ✅
+- `models/model_v3.onnx` ✅
 - `data/videos/video_30.avi` ✅
-- `../models/best.onnx` ❌
+- `../models/model_v3.onnx` ❌
 
 ---
 
@@ -171,7 +171,7 @@ model_path=models/model_v3.onnx
 Quick check:
 
 ```bash
-ls -l models/best.onnx
+ls -l models/model_v3.onnx
 ```
 
 ### CUDA vs CPU (ONNX Runtime)

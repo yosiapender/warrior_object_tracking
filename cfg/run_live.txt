@@ -2,7 +2,7 @@ include=cfg/policy.txt
 
 model_path=models/model_v3.onnx
 device=/dev/video2
-req_w=640
-req_h=480
+req_w=800
+req_h=600
 record_fps=30
-out_video=data/output/live.avi
+out_video=data/output/live_tes.avi

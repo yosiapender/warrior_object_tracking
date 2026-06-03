@@ -28,7 +28,6 @@ inline bool pickBestDetection(const std::vector<Detection>& dets, Detection& bes
     return true;
 }
 
-// ---- CVAT XML parser helpers ----
 inline bool getAttr(const std::string& s, const std::string& key, std::string& out) {
     const std::string pat = key + "=\"";
     size_t p = s.find(pat);
@@ -106,7 +105,6 @@ static std::unordered_map<int, GtFrame> loadCvatXmlTrackBoxes(
     return gt;
 }
 
-// ---- runtime tracker switch ----
 struct ITracker {
     virtual ~ITracker() = default;
     virtual bool init(const cv::Mat& frame, const cv::Rect& box) = 0;
@@ -130,8 +128,7 @@ struct CsrtAdapter final : ITracker {
     void reset() override { t.reset(); }
     bool isInitialized() const override { return t.isInitialized(); }
 };
-
-} // namespace
+}
 
 int main(int argc, char** argv) {
     const app::AppConfig cfg = app::loadConfigFromArgsOrDefaults(argc, argv);
@@ -146,7 +143,6 @@ int main(int argc, char** argv) {
     const std::string vis_out    = cfg.out_vis;
     const app::Policy  policy    = cfg.policy;
 
-    // evaluation thresholds (kept as constants for now)
     const double IOU_SUCCESS_THR = 0.50;
     const double CENTER_OK_PX    = 20.0;
 
@@ -158,7 +154,6 @@ int main(int argc, char** argv) {
     std::cout << "[INFO] CSV out : " << csv_out << "\n";
     if (!vis_out.empty()) std::cout << "[INFO] Vis out : " << vis_out << "\n";
 
-    // Load GT
     std::unordered_map<int, GtFrame> gt;
     try {
         gt = loadCvatXmlTrackBoxes(xml_path, label);
@@ -181,7 +176,6 @@ int main(int argc, char** argv) {
     const int w = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
     const int h = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
 
-    // Optional visualization writer
     cv::VideoWriter vis_writer;
     if (!vis_out.empty()) {
         vis_writer.open(vis_out,
@@ -193,7 +187,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    // CSV
     std::ofstream fout(csv_out);
     if (!fout.is_open()) {
         std::cerr << "[ERROR] Cannot write CSV: " << csv_out << "\n";
@@ -203,7 +196,6 @@ int main(int argc, char** argv) {
         "yolo_has,reinit,"
         "yolo_ms,yolo_fps,trk_ms,trk_fps,total_ms,total_fps\n";
 
-    // Tracker switch
     std::unique_ptr<ITracker> tracker;
     if (tracker_ty == "kcf") tracker = std::make_unique<KcfAdapter>();
     else if (tracker_ty == "csrt") tracker = std::make_unique<CsrtAdapter>();
@@ -221,7 +213,6 @@ int main(int argc, char** argv) {
     cv::Rect prev_box{};
     bool have_prev = false;
 
-    // Stats
     int total_frames = 0;
     int gt_present_frames = 0;
     int gt_absent_frames = 0;
@@ -236,11 +227,6 @@ int main(int argc, char** argv) {
 
     int fp_on_absent = 0;
 
-    // ============================================================
-    // YOLO schedule:
-    //   redetect_every == 0  => YOLO only on first frame, never again
-    //   redetect_every  > 0  => YOLO at init/lost + periodic
-    // ============================================================
     const bool yolo_once = (policy.redetect_every == 0);
 
     while (true) {
@@ -251,7 +237,6 @@ int main(int argc, char** argv) {
         ++total_frames;
         total_t.start();
 
-        // ---- GT ----
         bool gt_has = false;
         cv::Rect gt_box{};
         if (auto it = gt.find(frame_idx); it != gt.end() && it->second.has) {
@@ -261,7 +246,6 @@ int main(int argc, char** argv) {
         if (gt_has) ++gt_present_frames;
         else ++gt_absent_frames;
 
-        // ---- YOLO scheduling (requested behavior) ----
         bool periodic_redetect = false;
         if (!yolo_once && policy.redetect_every > 0) {
             periodic_redetect = (frame_idx % policy.redetect_every == 0);
@@ -296,7 +280,6 @@ int main(int argc, char** argv) {
 
         bool reinit = false;
 
-        // ---- YOLO correction BEFORE tracker.update() ----
         if (yolo_has) {
             const cv::Rect yolo_box = app::clampRect(best_det.box, frame.size());
             const cv::Rect init_box = app::expandBox(yolo_box, policy.init_expand, frame.size());
@@ -311,7 +294,6 @@ int main(int argc, char** argv) {
                     cv::norm(app::rectCenter(track_tight) - app::rectCenter(yolo_box));
                 const double iou_val = app::IoU(track_tight, yolo_box);
 
-                // In yolo_once mode, periodic_redetect is always false (good).
                 if (policy.snap_on_periodic && periodic_redetect) must_snap = true;
                 if (center_dist > policy.snap_center_px) must_snap = true;
                 if (iou_val < policy.snap_iou_min) must_snap = true;
@@ -337,7 +319,6 @@ int main(int argc, char** argv) {
             }
         }
 
-        // ---- Tracker update ----
         if (!reinit && tracker->isInitialized() && have_track) {
             trk_t.start();
             cv::Rect new_box = track_box;
@@ -367,7 +348,6 @@ int main(int argc, char** argv) {
         const bool pred_has = have_track && tracker->isInitialized();
         if (pred_has) ++pred_present_frames;
 
-        // ---- Eval metrics ----
         double iou = -1.0;
         double cd  = -1.0;
 
@@ -402,10 +382,9 @@ int main(int argc, char** argv) {
             << total_ms << ","
             << total_fps << "\n";
 
-        // ---- Visualization ----
         cv::Mat vis = frame.clone();
         if (gt_has) {
-            // cv::rectangle(vis, gt_box, cv::Scalar(0, 255, 255), BOX_THICKNESS, LINE_STYLE);
+            cv::rectangle(vis, gt_box, cv::Scalar(0, 255, 255), BOX_THICKNESS, LINE_STYLE);
         }
         if (pred_has) {
             cv::rectangle(vis, track_box, cv::Scalar(255, 0, 0), BOX_THICKNESS, LINE_STYLE);

@@ -50,7 +50,6 @@ bool KcfLocalTracker::init(const cv::Mat& frame, const cv::Rect& init_box) {
     if (init_box.width <= 1 || init_box.height <= 1) return false;
 
     if (params_.use_cn && frame.channels() != 3) {
-        // CN requires BGR input
         return false;
     }
 
@@ -61,11 +60,9 @@ bool KcfLocalTracker::init(const cv::Mat& frame, const cv::Rect& init_box) {
     roi_.width  = static_cast<double>(init_box.width);
     roi_.height = static_cast<double>(init_box.height);
 
-    // output sigma
     output_sigma_ = std::sqrt(static_cast<float>(roi_.width * roi_.height)) * params_.output_sigma_factor;
     output_sigma_ = -0.5f / (output_sigma_ * output_sigma_);
 
-    // resize if too big
     resizeImage_ = false;
     if (params_.resize && (roi_.width * roi_.height > params_.max_patch_size)) {
         resizeImage_ = true;
@@ -75,18 +72,15 @@ bool KcfLocalTracker::init(const cv::Mat& frame, const cv::Rect& init_box) {
         roi_.height /= 2.0;
     }
 
-    // pad ROI to 2x target
     roi_.x -= roi_.width / 2.0;
     roi_.y -= roi_.height / 2.0;
     roi_.width  *= 2.0;
     roi_.height *= 2.0;
 
-    // ensure roi intersects image
     const int imgW = resizeImage_ ? frame.cols / 2 : frame.cols;
     const int imgH = resizeImage_ ? frame.rows / 2 : frame.rows;
     if ((roi_ & cv::Rect2d(0, 0, imgW, imgH)).empty()) return false;
 
-    // hann windows
     createHanningWindow(hann_, roi_.size(), CV_32F);
     if (params_.use_cn) {
         cv::Mat layers[10];
@@ -94,7 +88,6 @@ bool KcfLocalTracker::init(const cv::Mat& frame, const cv::Rect& init_box) {
         cv::merge(layers, 10, hann_cn_);
     }
 
-    // gaussian desired response
     y_ = cv::Mat::zeros(static_cast<int>(roi_.height), static_cast<int>(roi_.width), CV_32F);
     const int cy = y_.rows / 2;
     const int cx = y_.cols / 2;
@@ -142,19 +135,15 @@ bool KcfLocalTracker::update(const cv::Mat& frame, cv::Rect& out_box) {
 
     if (params_.use_cn && frame.channels() != 3) return false;
 
-    // Resize image if needed
     cv::Mat img;
+
     if (resizeImage_) {
         cv::resize(frame, img, cv::Size(frame.cols / 2, frame.rows / 2), 0, 0, cv::INTER_LINEAR_EXACT);
     } else {
         img = frame;
     }
 
-    // -------------------------
-    // Detection
-    // -------------------------
     if (frame_ > 0) {
-        // Extract current features at roi_
         if (params_.use_gray) {
             if (!getSubWindowGray(img, roi_, X_gray_, imgPatch_)) return false;
         }
@@ -162,7 +151,6 @@ bool KcfLocalTracker::update(const cv::Mat& frame, cv::Rect& out_box) {
             if (!getSubWindowCN(img, roi_, X_cn_, imgPatch_)) return false;
 
             if (params_.compress_feature) {
-                // compress current + model CN using existing proj_mtx_
                 compressFeature(proj_mtx_, X_cn_, X_cn_c_);
                 compressFeature(proj_mtx_, Z_cn_, Z_cn_c_);
             } else {
@@ -171,7 +159,6 @@ bool KcfLocalTracker::update(const cv::Mat& frame, cv::Rect& out_box) {
             }
         }
 
-        // Merge x_ and z_
         if (params_.use_gray && params_.use_cn) {
             cv::Mat partsX[2] = { X_cn_c_, X_gray_ };
             cv::merge(partsX, 2, x_);
@@ -185,7 +172,6 @@ bool KcfLocalTracker::update(const cv::Mat& frame, cv::Rect& out_box) {
             z_ = Z_gray_;
         }
 
-        // Compute response
         denseGaussKernel(params_.sigma, x_, z_, k_);
         fft2(k_, kf_);
         calcResponse(alphaf_, kf_, response_);
@@ -203,19 +189,12 @@ bool KcfLocalTracker::update(const cv::Mat& frame, cv::Rect& out_box) {
         roi_.y += (maxL.y - roi_.height / 2.0 + 1.0);
     }
 
-    // -------------------------
-    // Output target box (centered in roi)
-    // -------------------------
     cv::Rect2d bbox;
     bbox.x = (resizeImage_ ? roi_.x * 2.0 : roi_.x) + (resizeImage_ ? roi_.width * 2.0 : roi_.width) / 4.0;
     bbox.y = (resizeImage_ ? roi_.y * 2.0 : roi_.y) + (resizeImage_ ? roi_.height * 2.0 : roi_.height) / 4.0;
     bbox.width  = (resizeImage_ ? roi_.width * 2.0 : roi_.width) / 2.0;
     bbox.height = (resizeImage_ ? roi_.height * 2.0 : roi_.height) / 2.0;
 
-    // -------------------------
-    // Learning / model update
-    // -------------------------
-    // Extract features again at updated roi_
     if (params_.use_gray) {
         if (!getSubWindowGray(img, roi_, X_gray_, imgPatch_)) return false;
         if (frame_ == 0) Z_gray_ = X_gray_.clone();
@@ -237,7 +216,6 @@ bool KcfLocalTracker::update(const cv::Mat& frame, cv::Rect& out_box) {
         }
     }
 
-    // Merge x_ for training (x-x kernel)
     if (params_.use_gray && params_.use_cn) {
         cv::Mat partsX[2] = { X_cn_c_, X_gray_ };
         cv::merge(partsX, 2, x_);
@@ -247,11 +225,9 @@ bool KcfLocalTracker::update(const cv::Mat& frame, cv::Rect& out_box) {
         x_ = X_gray_;
     }
 
-    // Train alphaf_
     denseGaussKernel(params_.sigma, x_, x_, k_);
     fft2(k_, kf_);
 
-    // alphaf = yf / (kf + lambda)
     cv::Mat kf_lambda = kf_.clone();
     for (int i = 0; i < kf_lambda.rows; ++i) {
         cv::Vec2f* row = kf_lambda.ptr<cv::Vec2f>(i);
@@ -280,7 +256,6 @@ bool KcfLocalTracker::update(const cv::Mat& frame, cv::Rect& out_box) {
         alphaf_ = (1.0f - params_.interp_factor) * alphaf_ + params_.interp_factor * new_alphaf;
     }
 
-    // Keep model-compressed CN available for detection
     if (params_.use_cn) {
         if (params_.compress_feature) {
             compressFeature(proj_mtx_, Z_cn_, Z_cn_c_);
@@ -291,7 +266,6 @@ bool KcfLocalTracker::update(const cv::Mat& frame, cv::Rect& out_box) {
 
     frame_++;
 
-    // clamp output box to frame
     const cv::Rect frame_rect(0, 0, frame.cols, frame.rows);
     out_box = cv::Rect(
         static_cast<int>(std::round(bbox.x)),
@@ -302,8 +276,6 @@ bool KcfLocalTracker::update(const cv::Mat& frame, cv::Rect& out_box) {
 
     return true;
 }
-
-// ----------------- helpers -----------------
 
 void KcfLocalTracker::createHanningWindow(cv::Mat& dst, cv::Size winSize, int type) {
     CV_Assert(type == CV_32FC1 || type == CV_64FC1);
@@ -463,14 +435,12 @@ void KcfLocalTracker::denseGaussKernel(float sigma, const cv::Mat& x, const cv::
     const int C = x.channels();
     CV_Assert(C >= 1);
 
-    // Split channels (views; still allocs a vector header, but data refs are cheap)
     std::vector<cv::Mat> xch, ych;
     cv::split(x, xch);
     cv::split(y, ych);
 
-    // DFT per channel and cross-power
     std::vector<cv::Mat> xyf(C);
-    cv::Mat sum_xyf; // CV_32FC2
+    cv::Mat sum_xyf;
 
     for (int c = 0; c < C; ++c) {
         cv::Mat xf, yf;
@@ -483,24 +453,21 @@ void KcfLocalTracker::denseGaussKernel(float sigma, const cv::Mat& x, const cv::
         else sum_xyf += xyf[c];
     }
 
-    // Back to spatial: correlation term
-    cv::Mat xy; // CV_32F
+    cv::Mat xy;
     cv::idft(sum_xyf, xy, cv::DFT_SCALE | cv::DFT_REAL_OUTPUT);
 
-    // Optional OpenCV-style wrap_kernel shift (moves peak to center)
     if (params_.wrap_kernel) {
-        // shift rows by H/2 and cols by W/2 (circular shift)
         const int shift_y = xy.rows / 2;
         const int shift_x = xy.cols / 2;
 
-        // roll rows
+        // shift rows
         if (shift_y > 0) {
             cv::Mat tmp;
             xy(cv::Rect(0, 0, xy.cols, shift_y)).copyTo(tmp);
             xy(cv::Rect(0, shift_y, xy.cols, xy.rows - shift_y)).copyTo(xy(cv::Rect(0, 0, xy.cols, xy.rows - shift_y)));
             tmp.copyTo(xy(cv::Rect(0, xy.rows - shift_y, xy.cols, shift_y)));
         }
-        // roll cols
+        // shift cols
         if (shift_x > 0) {
             cv::Mat tmp;
             xy(cv::Rect(0, 0, shift_x, xy.rows)).copyTo(tmp);
@@ -509,23 +476,19 @@ void KcfLocalTracker::denseGaussKernel(float sigma, const cv::Mat& x, const cv::
         }
     }
 
-    // Compute ||x||^2 and ||y||^2 (multi-channel norm)
     const double nx = cv::norm(x);
     const double ny = cv::norm(y);
     const double xx = nx * nx;
     const double yy = ny * ny;
 
-    // (xx + yy - 2*xy) / (H*W*C)
     const float invN = 1.0f / static_cast<float>(x.rows * x.cols * C);
     xy = (static_cast<float>(xx + yy) - 2.0f * xy) * invN;
 
-    // Clamp to >= 0 (numerical safety)
     for (int i = 0; i < xy.rows; ++i) {
         float* row = xy.ptr<float>(i);
         for (int j = 0; j < xy.cols; ++j) row[j] = std::max(0.0f, row[j]);
     }
 
-    // exp( -1/sigma^2 * xy )
     xy *= (-1.0f / (sigma * sigma));
     cv::exp(xy, k);
 }

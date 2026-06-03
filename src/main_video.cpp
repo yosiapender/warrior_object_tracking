@@ -25,7 +25,7 @@ inline bool pickBestDetection(const std::vector<Detection>& dets, Detection& bes
         [](const Detection& a, const Detection& b) { return a.score < b.score; });
     return true;
 }
-} // namespace
+}
 
 namespace {
 
@@ -43,7 +43,6 @@ inline cv::Mat makeHeatmapBGR(const cv::Mat& resp32f, int up = 4) {
     return heat;
 }
 
-// Computes PSR for debugging: (peak - mean(side)) / std(side)
 inline float computePSR(const cv::Mat& resp32f, int excl_radius = 5) {
     CV_Assert(resp32f.type() == CV_32F);
     double minV, maxV;
@@ -63,9 +62,7 @@ inline float computePSR(const cv::Mat& resp32f, int excl_radius = 5) {
     const double denom = stdS[0] + 1e-6;
     return static_cast<float>((maxV - meanS[0]) / denom);
 }
-} // namespace
-
-
+}
 
 int main(int argc, char** argv) {
     const app::AppConfig cfg = app::loadConfigFromArgsOrDefaults(argc, argv);
@@ -103,7 +100,6 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    // Choose tracker here (kept simple; switch by editing one line)
     KcfTracker tracker;
     // CsrtTracker tracker;
 
@@ -147,7 +143,6 @@ int main(int argc, char** argv) {
 
         bool reinit = false;
 
-        // ---- YOLO correction BEFORE tracker.update() ----
         if (yolo_has) {
             const cv::Rect yolo_box = app::clampRect(best_det.box, frame.size());
             const cv::Rect init_box = app::expandBox(yolo_box, policy.init_expand, frame.size());
@@ -182,36 +177,30 @@ int main(int argc, char** argv) {
             }
         }
 
-        // ---- Tracker update ----
         if (!reinit && tracker.isInitialized() && have_track) {
             trk_t.start();
             cv::Rect new_box = track_box;
             bool ok = tracker.update(frame, new_box);
             trk_ms = trk_t.stopMs();
 
-            // ---- KCF response visualization ----
             cv::Mat resp;
             cv::Rect search_win;
             if (tracker.getLastResponseMap(resp) && tracker.getSearchWindowRect(search_win) && !resp.empty()) {
-                // Draw search window
                 search_win = app::clampRect(search_win, frame.size());
                 cv::rectangle(frame, search_win, cv::Scalar(0, 255, 255), 1, LINE_STYLE);
 
-                // Make heatmap and resize to search window size
                 cv::Mat heat = makeHeatmapBGR(resp, /*up=*/1);
                 cv::resize(heat, heat, search_win.size(), 0, 0, cv::INTER_LINEAR);
 
-                // Alpha blend into ROI (in-place)
                 cv::Mat roi_bgr = frame(search_win);
                 cv::addWeighted(roi_bgr, 0.6, heat, 0.4, 0.0, roi_bgr);
 
-                // Show standalone too (optional)
                 cv::imshow("KCF response", makeHeatmapBGR(resp, /*up=*/4));
 
-                const float psr = computePSR(resp);
-                cv::putText(frame, "PSR: " + std::to_string(psr),
-                            {10, 120}, cv::FONT_HERSHEY_SIMPLEX, 0.7,
-                            cv::Scalar(0, 0, 255), 2, LINE_STYLE);
+                // const float psr = computePSR(resp);
+                // cv::putText(frame, "PSR: " + std::to_string(psr),
+                //             {10, 120}, cv::FONT_HERSHEY_SIMPLEX, 0.7,
+                //             cv::Scalar(0, 0, 255), 2, LINE_STYLE);
             }
 
             if (ok && app::validBox(new_box, frame.size(), policy)) {
@@ -234,7 +223,6 @@ int main(int argc, char** argv) {
             }
         }
 
-        // ---- Draw ----
         if (yolo_has) {
             const cv::Rect yolo_box = app::clampRect(best_det.box, frame.size());
             cv::rectangle(frame, yolo_box, cv::Scalar(0, 255, 0), BOX_THICKNESS, LINE_STYLE);

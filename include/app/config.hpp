@@ -17,7 +17,7 @@ struct AppConfig {
     std::string video_path = "../data/videos/video_30.avi";   // for video/eval
     std::string xml_path   = "../data/gt/video1.1.xml";       // for eval
     std::string label      = "ball";                          // for eval
-    std::string tracker    = "csrt";                          // for eval ("kcf"|"csrt")
+    std::string tracker    = "csrt";                          // for eval
 
     // Outputs
     std::string out_video  = "../data/output/out.avi";        // for video/live record
@@ -30,7 +30,6 @@ struct AppConfig {
     int req_h = 720;
     double record_fps = 30.0;
 
-    // Tracking policy
     Policy policy{};
 };
 
@@ -41,20 +40,15 @@ inline std::string trim(std::string s) {
     return s;
 }
 
-// Robust merge: later keys override earlier ones.
 inline void mergeInto(std::unordered_map<std::string, std::string>& dst,
                       const std::unordered_map<std::string, std::string>& src) {
     for (const auto& kv : src) dst[kv.first] = kv.second;
 }
 
-// Loads key=value file. Supports: include=other_file.txt
-// - include is processed first, then local keys override included keys.
-// - includes can be nested; cycles are detected.
 inline std::unordered_map<std::string, std::string> loadKeyValueFileImpl(
     const std::string& path,
     std::vector<std::string>& include_stack) {
 
-    // Cycle detection
     for (const auto& p : include_stack) {
         if (p == path) {
             std::string msg = "Config include cycle detected:\n";
@@ -87,9 +81,6 @@ inline std::unordered_map<std::string, std::string> loadKeyValueFileImpl(
         if (k.empty() || v.empty()) continue;
 
         if (k == "include") {
-            // Process include immediately
-            // Note: relative paths are relative to current working directory.
-            // If you want "relative to this cfg file", we can add it later.
             auto inc = loadKeyValueFileImpl(v, include_stack);
             mergeInto(merged, inc);
         } else {
@@ -97,7 +88,6 @@ inline std::unordered_map<std::string, std::string> loadKeyValueFileImpl(
         }
     }
 
-    // Local overrides included
     mergeInto(merged, local);
 
     include_stack.pop_back();
@@ -183,5 +173,4 @@ inline void printConfigBrief(const AppConfig& c) {
               << " max_jump=" << c.policy.max_center_jump_px
               << "\n";
 }
-
-} // namespace app
+}

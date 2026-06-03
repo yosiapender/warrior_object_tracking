@@ -8,9 +8,6 @@
 
 namespace app {
 
-// --------------------
-// Timer
-// --------------------
 class Timer {
 public:
     void start() { t1_ = std::chrono::high_resolution_clock::now(); }
@@ -22,9 +19,6 @@ private:
     std::chrono::high_resolution_clock::time_point t1_{};
 };
 
-// --------------------
-// Tracking policy knobs
-// --------------------
 struct Policy {
     int   redetect_every = 15;
     float init_expand    = 1.25f;
@@ -40,9 +34,6 @@ struct Policy {
     double min_inframe_frac   = 0.65;
 };
 
-// --------------------
-// Geometry helpers
-// --------------------
 inline cv::Rect clampRect(const cv::Rect& r, const cv::Size& sz) {
     return r & cv::Rect(0, 0, sz.width, sz.height);
 }
@@ -87,9 +78,6 @@ inline bool validBox(const cv::Rect& r, const cv::Size& sz, const Policy& p) {
     return true;
 }
 
-// --------------------
-// UI helper
-// --------------------
 inline void drawTopRightStatus(cv::Mat& frame,
                               const std::string& text,
                               int line_idx,
@@ -106,5 +94,4 @@ inline void drawTopRightStatus(cv::Mat& frame,
                 cv::FONT_HERSHEY_SIMPLEX, scale,
                 cv::Scalar(0, 0, 255), thickness, cv::LINE_AA);
 }
-
-} // namespace app
+}

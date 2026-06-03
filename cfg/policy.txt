@@ -2,7 +2,7 @@
 redetect_every=15
 init_expand=1.25
 yolo_min_conf=0.25
-snap_on_periodic=0
+snap_on_periodic=1
 snap_center_px=20
 snap_iou_min=0.5
 max_center_jump_px=120

@@ -13,12 +13,14 @@ YOLO (ONNX Runtime) + OpenCV tracker (KCF/CSRT) hybrid pipeline for ball trackin
 ```
 WARRIOR_OBJECT_TRACKING/
 ├── cfg/
+│   ├── plot_eval.txt
 │   ├── policy.txt
 │   ├── run_live.txt
 │   ├── run_video.txt
 │   └── run_eval.txt
 ├── data/
 │   ├── gt/
+│   ├── images/
 │   ├── output/
 │   └── videos/
 ├── include/
@@ -28,19 +30,27 @@ WARRIOR_OBJECT_TRACKING/
 │   ├── detector/
 │   │   └── yolo_detector.hpp
 │   └── tracker/
+│       ├── colornames_lut.hpp
 │       ├── csrt_tracker.hpp
+│       ├── kcf_local.hpp
 │       └── kcf_tracker.hpp
 ├── models/
 │   ├── best.onnx
 │   ├── model_v2.onnx
 │   └── model_v3.onnx
 ├── src/
-│   ├── detector/yolo_detector.cpp
-│   ├── tracker/{kcf_tracker.cpp,csrt_tracker.cpp}
-│   ├── main.cpp
+│   ├── detector/
+│   │   └── yolo_detector.cpp
+│   ├── tracker/
+│       ├── colornames_lut.cpp
+│       ├── csrt_tracker.cpp
+│       ├── kcf_local.cpp
+│       └── kcf_tracker.cpp
+│   ├── main_eval.cpp
 │   ├── main_video.cpp
-│   └── main_eval.cpp
-├── tools/plot_eval.py
+│   └── main.cpp
+├── tools/
+│   └── plot_eval.py
 └── CMakeLists.txt
 ```
 
@@ -50,7 +60,7 @@ WARRIOR_OBJECT_TRACKING/
 
 All paths in `cfg/*.txt` are resolved relative to the **current working directory**.
 
-✅ Recommended workflow: **always run executables from the project root**  
+Recommended workflow: **always run executables from the project root**  
 So config paths should be **project-root relative** (no `../`), e.g.:
 
 - `models/best.onnx` ✅
@@ -84,12 +94,12 @@ Config format is simple `key=value` with optional includes:
 
 ```txt
 include=cfg/policy.txt
-model_path=models/best.onnx
-video_path=data/videos/video_30.avi
+model_path=models/model_v3.onnx
+video_path=data/videos/challenge1_occluison.avi
 out_video=data/output/out.avi
 ```
 
-Includes are processed first; local keys override included keys. Cycles are detected.
+Includes are processed first, local keys override included keys. Cycles are detected.
 
 ---
 
@@ -115,7 +125,7 @@ min_inframe_frac=0.65
 ```txt
 include=cfg/policy.txt
 
-model_path=models/best.onnx
+model_path=models/model_v3.onnx
 video_path=data/videos/video_30.avi
 out_video=data/output/no_obj.avi
 ```
@@ -124,7 +134,7 @@ out_video=data/output/no_obj.avi
 ```txt
 include=cfg/policy.txt
 
-model_path=models/best.onnx
+model_path=models/model_v3.onnx
 device=/dev/video2
 req_w=1280
 req_h=720
@@ -182,7 +192,7 @@ python tools/plot_eval.py --csv data/output/eval_hybrid.csv --out_prefix data/ou
 Optional knobs:
 
 ```bash
-python tools/plot_eval.py --csv data/output/eval_hybrid.csv --max_dist 50 --p_at 20
+python tools/plot_eval.py --csv data/output/eval_hybrid.csv --max_dist 30 --p_at 20
 ```
 
 ---
@@ -192,7 +202,7 @@ python tools/plot_eval.py --csv data/output/eval_hybrid.csv --max_dist 50 --p_at
 ### ONNX model “File doesn’t exist”
 This usually means your `model_path` is wrong relative to where you run the command.
 
-✅ Run from project root and use `model_path=models/best.onnx`.
+Run from project root and use `model_path=models/model_v3.onnx`.
 
 Quick check:
 
@@ -206,4 +216,4 @@ If ONNX Runtime CUDA provider is available, the detector will attempt to use it;
 ---
 
 ## License
-(Choose a license and add it here.)
+This project is licensed under the MIT License. See the LICENSE file for details.

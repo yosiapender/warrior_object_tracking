@@ -21,12 +21,12 @@ public:
 
         // descriptors
         bool use_gray;   // NPCA
-        bool use_cn;     // PCA path (before compression)
+        bool use_cn;     // PCA path
 
         // PCA compression
         bool  compress_feature;
-        int   compressed_size;     // e.g. 2
-        float pca_learning_rate;   // e.g. 0.15
+        int   compressed_size;     
+        float pca_learning_rate;
 
         Params()
             : sigma(0.2f),

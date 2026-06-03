@@ -25,7 +25,44 @@ inline bool pickBestDetection(const std::vector<Detection>& dets, Detection& bes
         [](const Detection& a, const Detection& b) { return a.score < b.score; });
     return true;
 }
-} // namespace
+}
+
+namespace {
+
+inline cv::Mat makeHeatmapBGR(const cv::Mat& resp32f, int up = 4) {
+    cv::Mat norm8u;
+    cv::normalize(resp32f, norm8u, 0, 255, cv::NORM_MINMAX);
+    norm8u.convertTo(norm8u, CV_8U);
+
+    if (up > 1) {
+        cv::resize(norm8u, norm8u, cv::Size(), up, up, cv::INTER_NEAREST);
+    }
+
+    cv::Mat heat;
+    cv::applyColorMap(norm8u, heat, cv::COLORMAP_JET);
+    return heat;
+}
+
+inline float computePSR(const cv::Mat& resp32f, int excl_radius = 5) {
+    CV_Assert(resp32f.type() == CV_32F);
+    double minV, maxV;
+    cv::Point minL, maxL;
+    cv::minMaxLoc(resp32f, &minV, &maxV, &minL, &maxL);
+
+    cv::Mat mask(resp32f.size(), CV_8U, cv::Scalar(255));
+    const int x0 = std::max(0, maxL.x - excl_radius);
+    const int y0 = std::max(0, maxL.y - excl_radius);
+    const int x1 = std::min(resp32f.cols, maxL.x + excl_radius + 1);
+    const int y1 = std::min(resp32f.rows, maxL.y + excl_radius + 1);
+    mask(cv::Rect(x0, y0, x1 - x0, y1 - y0)) = 0;
+
+    cv::Scalar meanS, stdS;
+    cv::meanStdDev(resp32f, meanS, stdS, mask);
+
+    const double denom = stdS[0] + 1e-6;
+    return static_cast<float>((maxV - meanS[0]) / denom);
+}
+}
 
 int main(int argc, char** argv) {
     const app::AppConfig cfg = app::loadConfigFromArgsOrDefaults(argc, argv);
@@ -69,7 +106,6 @@ int main(int argc, char** argv) {
     if (writer.isOpened()) std::cout << "[INFO] Recording to: " << output_path << "\n";
     else std::cerr << "[WARN] VideoWriter not opened; running without saving.\n";
 
-    // Choose tracker (simple switch)
     //CsrtTracker tracker;
     KcfTracker tracker;
 
@@ -113,7 +149,6 @@ int main(int argc, char** argv) {
 
         bool reinit = false;
 
-        // ---- YOLO correction BEFORE tracker.update() ----
         if (yolo_has) {
             const cv::Rect yolo_box = app::clampRect(best_det.box, frame.size());
             const cv::Rect init_box = app::expandBox(yolo_box, policy.init_expand, frame.size());
@@ -148,12 +183,31 @@ int main(int argc, char** argv) {
             }
         }
 
-        // ---- Tracker update ----
         if (!reinit && tracker.isInitialized() && have_track) {
             trk_t.start();
             cv::Rect new_box = track_box;
             bool ok = tracker.update(frame, new_box);
             trk_ms = trk_t.stopMs();
+
+            cv::Mat resp;
+            cv::Rect search_win;
+            if (tracker.getLastResponseMap(resp) && tracker.getSearchWindowRect(search_win) && !resp.empty()) {
+                search_win = app::clampRect(search_win, frame.size());
+                cv::rectangle(frame, search_win, cv::Scalar(0, 255, 255), 1, LINE_STYLE);
+
+                cv::Mat heat = makeHeatmapBGR(resp, /*up=*/1);
+                cv::resize(heat, heat, search_win.size(), 0, 0, cv::INTER_LINEAR);
+
+                cv::Mat roi_bgr = frame(search_win);
+                cv::addWeighted(roi_bgr, 0.6, heat, 0.4, 0.0, roi_bgr);
+
+                cv::imshow("KCF response", makeHeatmapBGR(resp, /*up=*/4));
+
+                // const float psr = computePSR(resp);
+                // cv::putText(frame, "PSR: " + std::to_string(psr),
+                //             {10, 120}, cv::FONT_HERSHEY_SIMPLEX, 0.7,
+                //             cv::Scalar(0, 0, 255), 2, LINE_STYLE);
+            }            
 
             if (ok && app::validBox(new_box, frame.size(), policy)) {
                 if (have_prev) {
@@ -175,7 +229,6 @@ int main(int argc, char** argv) {
             }
         }
 
-        // ---- Draw ----
         if (yolo_has) {
             const cv::Rect yolo_box = app::clampRect(best_det.box, frame.size());
             cv::rectangle(frame, yolo_box, cv::Scalar(0,255,0), BOX_THICKNESS, LINE_STYLE);

@@ -1,5 +1,5 @@
 include=cfg/policy.txt
 
 model_path=models/model_v3.onnx
-video_path=data/videos/challenge4_stress_test.avi
-out_video=data/output/stress_test.avi
+video_path=data/videos/challenge1_occlusion.avi
+out_video=data/output/occlusion.avi

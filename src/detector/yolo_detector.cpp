@@ -15,7 +15,7 @@ inline size_t numel(const std::vector<int64_t>& shape) {
     for (int64_t d : shape) n *= static_cast<size_t>(d > 0 ? d : 1);
     return n;
 }
-} // namespace
+}
 
 YoloDetector::YoloDetector(const std::string& onnx_path,
                            int input_width,
@@ -76,7 +76,6 @@ cv::Mat YoloDetector::preprocess(const cv::Mat& image, float& scale) {
     const int w = image.cols;
     const int h = image.rows;
 
-    // top-left letterbox like your current logic (pad right/bottom only)
     scale = std::min(input_width_ / static_cast<float>(w),
                      input_height_ / static_cast<float>(h));
 
@@ -89,7 +88,6 @@ cv::Mat YoloDetector::preprocess(const cv::Mat& image, float& scale) {
     cv::Mat padded(input_height_, input_width_, CV_8UC3, cv::Scalar(114, 114, 114));
     resized.copyTo(padded(cv::Rect(0, 0, new_w, new_h)));
 
-    // NCHW float32 blob, normalized, RGB
     return cv::dnn::blobFromImage(
         padded,
         1.0 / 255.0,
@@ -107,7 +105,6 @@ std::vector<Detection> YoloDetector::postprocess(const cv::Size& orig_size,
                                                  size_t out_count) {
     std::vector<Detection> dets;
 
-    // Your current model expectation:
     // (1, 5, 8400) => layout [x,y,w,h,conf] each length 8400
     constexpr int NUM_BOXES = 8400;
     constexpr int CHANNELS  = 5;
@@ -138,7 +135,6 @@ std::vector<Detection> YoloDetector::postprocess(const cv::Size& orig_size,
         float x = cx - 0.5f * bw;
         float y = cy - 0.5f * bh;
 
-        // pad is right/bottom only, no offset subtraction
         x  /= scale; y  /= scale;
         const float ww = bw / scale;
         const float hh = bh / scale;
@@ -190,8 +186,6 @@ std::vector<Detection> YoloDetector::detect(const cv::Mat& image) {
 
     if (blob.empty() || blob.type() != CV_32F) return {};
 
-    // Build input tensor WITHOUT extra memcpy:
-    // blob data is contiguous float32 in NCHW.
     const std::vector<int64_t> input_shape = {1, 3, input_height_, input_width_};
     const size_t tensor_size = static_cast<size_t>(1) * 3 * input_height_ * input_width_;
     float* blob_ptr = blob.ptr<float>();

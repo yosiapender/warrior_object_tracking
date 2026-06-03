@@ -18,7 +18,6 @@ bool CsrtTracker::init(const cv::Mat& frame, const cv::Rect& init_box) {
     try {
         tracker_ = cv::TrackerCSRT::create();
 
-        // Your OpenCV build expects cv::Rect& for init/update via cv::Tracker base
         cv::Rect box = init_box;
         tracker_->init(frame, box);
 
@@ -38,8 +37,8 @@ bool CsrtTracker::update(const cv::Mat& frame, cv::Rect& out_box) {
 
     bool ok = false;
     try {
-        cv::Rect box = out_box;              // must be lvalue
-        ok = tracker_->update(frame, box);   // expects cv::Rect&
+        cv::Rect box = out_box;              
+        ok = tracker_->update(frame, box);   
         out_box = box;
     } catch (const cv::Exception& e) {
         std::cerr << "[CSRT] update exception: " << e.what() << "\n";

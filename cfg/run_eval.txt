@@ -4,5 +4,5 @@ video_path=data/videos/challenge1_occlusion.avi
 xml_path=data/gt/challenge1_occlusion_v1.1.xml
 label=ball
 tracker=kcf
-out_csv=data/output/result_occ.csv
-out_vis=data/output/result_occ.avi
+out_csv=data/result.csv
+out_vis=data/result.avi

@@ -13,7 +13,6 @@ public:
     bool update(const cv::Mat& frame, cv::Rect& out_box);
     bool getSearchWindowRect(cv::Rect& out) const;
 
-    // Response map in search-window coords (roi.size()), CV_32F
     bool getLastResponseMap(cv::Mat& out_response32f) const;
 
     void reset();

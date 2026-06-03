@@ -1,10 +1,54 @@
-csv=data/output/1_occlusion/eval_occlusion_KCF.csv
-out_prefix=data/output/1_occlusion/eval_occlusion_KCF
-condition=Occlusion
+# Overlay comparison config for tools/plot_eval.py
+# Run with:
+#   python tools/plot_eval.py --cfg cfg/plot_eval.txt
+#
+# The updated plot_eval.py accepts multiple CSV files separated by commas.
+# The labels field must match the number/order of CSV files.
+
+# ================================================================
+# 1) Occlusion
+# ================================================================
+#csv=data/output/1_occlusion/eval_occlusion_YOLO_KCF.csv,data/output/1_occlusion/eval_occlusion_KCF.csv
+#labels=YOLO+KCF,KCF
+#out_prefix=data/output/1_occlusion/eval_occlusion_compare
+#condition=Occlusion
+
+# ================================================================
+# 2) Distance Variation
+# ================================================================
+#csv=data/output/2_distance_variation/eval_distance_variation_YOLO_KCF.csv,data/output/2_distance_variation/eval_distance_variation_KCF.csv
+#labels=YOLO+KCF,KCF
+#out_prefix=data/output/2_distance_variation/eval_distance_variation_compare
+#condition=Distance Variation
+
+# ================================================================
+# 3) Fast Motion
+# ================================================================
+#csv=data/output/3_fast_motion/eval_fast_motion_YOLO_KCF.csv,data/output/3_fast_motion/eval_fast_motion_KCF.csv
+#labels=YOLO+KCF,KCF
+#out_prefix=data/output/3_fast_motion/eval_fast_motion_compare
+#condition=Fast Motion
+
+# ================================================================
+# 4) Stress Test - active by default
+# ================================================================
+csv=data/output/4_stress_test/eval_stress_test_YOLO_KCF.csv,data/output/4_stress_test/eval_stress_test_KCF.csv
+labels=YOLO+KCF,KCF
+out_prefix=data/output/4_stress_test/eval_stress_test_compare
+condition=Stress Test
+
+# ================================================================
+# Plot settings
+# ================================================================
 title_mode=both
 tracker=KCF
-legend_mode=kcf
-max_dist=50
+legend_mode=auto
+
+# Center-distance threshold range for Precision plots is restricted to 0-30 px.
+max_dist=30
+p_at=20
+success_iou=0.5
+
 smooth_method=kde
 curve_points=3001
 kde_bins=512

@@ -15,7 +15,7 @@ KcfTracker::KcfTracker() {
     params_.use_gray = true;
     params_.use_cn = true;                 // <-- enable CN
     params_.compress_feature = true;       // <-- enable PCA compression
-    params_.compressed_size = 10;           // typical
+    params_.compressed_size = 2;           // typical
     params_.pca_learning_rate = 0.15f;     // typical
 
     params_.wrap_kernel = false;

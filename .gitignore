@@ -57,9 +57,10 @@ Thumbs.db
 
 # Data files (large files - exclude or use Git LFS)
 /data/output/*      
-/data/videos/*.avi  
-/data/images/*.jpg  
-/models/*.onnx      
+/data/gt/*
+/data/videos/* 
+/data/images/*  
+/models/*
 
 # But keep empty directories
 !data/output/.gitkeep

@@ -1,6 +1,6 @@
 # WARRIOR_OBJECT_TRACKING
 
-YOLO (ONNX Runtime) + KCF hybrid pipeline for ball tracking:
+YOLO (ONNX Runtime) + OpenCV tracker hybrid pipeline for ball tracking:
 
 - **Live camera**: `object_tracking`
 - **Video input**: `object_tracking_video`

@@ -49,7 +49,7 @@ Config format uses simple `key=value` pairs with optional includes:
 ```txt
 include=cfg/policy.txt
 model_path=models/model_v3.onnx
-video_path=data/videos/challenge1_occluison.avi
+video_path=data/videos/challenge1_occlusion.avi
 out_video=data/output/out.avi
 ```
 
@@ -66,8 +66,8 @@ redetect_every=15
 init_expand=1.25
 yolo_min_conf=0.25
 snap_on_periodic=1
-snap_center_px=30
-snap_iou_min=0.20
+snap_center_px=20
+snap_iou_min=0.5
 max_center_jump_px=120
 min_area_px=16
 max_area_frac=0.35
